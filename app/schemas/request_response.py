@@ -81,6 +81,7 @@ class FaceSignalRequest(BaseModel):
     combined_score: float = 0.0
     fatigue_score: float = 0.0
     fatigue_tier: int = 0
+    snapshot_base64: str = ""  # base64-encoded image (optional)
 
 
 class FaceSignalResponse(BaseModel):

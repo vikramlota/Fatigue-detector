@@ -24,9 +24,38 @@ const siteToggle = document.getElementById("site-toggle");
 // ─── Gauge geometry ───────────────────────────────────────────────────────────
 const RADIUS = 50;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const SEGMENTS = 10; // Number of gauge segments
 
 // Initialise stroke-dasharray once (constant)
 gaugeFill.style.strokeDasharray = `${CIRCUMFERENCE}`;
+
+// Render tick marks for 10 segments
+function renderGaugeTicks() {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const ticksGroup = document.getElementById("gauge-ticks");
+  if (!ticksGroup) return;
+  ticksGroup.innerHTML = "";
+  for (let i = 0; i < SEGMENTS; i++) {
+    const angle = (i / SEGMENTS) * 2 * Math.PI;
+    const rOuter = RADIUS + 6;
+    const rInner = RADIUS - 6;
+    const x1 = 60 + rInner * Math.cos(angle - Math.PI / 2);
+    const y1 = 60 + rInner * Math.sin(angle - Math.PI / 2);
+    const x2 = 60 + rOuter * Math.cos(angle - Math.PI / 2);
+    const y2 = 60 + rOuter * Math.sin(angle - Math.PI / 2);
+    const tick = document.createElementNS(svgNS, "line");
+    tick.setAttribute("x1", x1);
+    tick.setAttribute("y1", y1);
+    tick.setAttribute("x2", x2);
+    tick.setAttribute("y2", y2);
+    tick.setAttribute("stroke", "#bbb");
+    tick.setAttribute("stroke-width", "2");
+    ticksGroup.appendChild(tick);
+  }
+}
+
+// Call once on load
+document.addEventListener("DOMContentLoaded", renderGaugeTicks);
 
 // ─── Tier metadata (mirrors presets.js — no import available in popup) ────────
 const TIER_META = {
@@ -67,20 +96,21 @@ let _cameraActive = false;
  * @param {number} score — 0-100
  */
 function updateGauge(score) {
-  const clamped = Math.max(0, Math.min(100, score));
+  // Clamp to 1-10
+  const clamped = Math.max(1, Math.min(10, Math.round(score)));
 
-  // Update number label
-  gaugeNumber.textContent = Math.round(clamped);
+  // Update number label (1-10)
+  gaugeNumber.textContent = clamped;
 
   // Stroke-dashoffset: 0 = full circle, circumference = empty circle
-  const offset = CIRCUMFERENCE - (clamped / 100) * CIRCUMFERENCE;
+  const offset = CIRCUMFERENCE - (clamped / SEGMENTS) * CIRCUMFERENCE;
   gaugeFill.style.strokeDashoffset = offset;
 
-  // Colour ramp
+  // Colour ramp (optional: adjust thresholds for 1-10 scale)
   let colour;
-  if (clamped < 30) colour = "#22c55e"; // Green
-  else if (clamped < 55) colour = "#f59e0b"; // Amber
-  else if (clamped < 75) colour = "#f97316"; // Orange
+  if (clamped <= 3) colour = "#22c55e"; // Green
+  else if (clamped <= 5) colour = "#f59e0b"; // Amber
+  else if (clamped <= 7) colour = "#f97316"; // Orange
   else colour = "#ef4444"; // Red
 
   gaugeFill.style.stroke = colour;

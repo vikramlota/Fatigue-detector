@@ -91,7 +91,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case "EYE_FATIGUE_SIGNAL": {
       const result = scorer.updateEyeSignal(payload);
       _persistAndBroadcast(result.score, result.tier);
-      _postFaceSignal(payload).catch(() => {});
+      _postFaceSignal(payload).catch((e) => {
+        // Surface the failure instead of swallowing it — the caller still
+        // works offline, but you'll see in devtools why rows aren't landing.
+        console.warn("[FocusLens worker] /face-signals POST failed:", e);
+      });
       sendResponse({ ok: true });
       break;
     }
@@ -202,9 +206,18 @@ async function _postFaceSignal(payload) {
     fatigue_score: scorer.smoothedScore ?? 0,
     fatigue_tier: scorer._tier ?? 0,
   };
-  await fetch(`${BACKEND_URL}/face-signals`, {
+  const resp = await fetch(`${BACKEND_URL}/face-signals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} from /face-signals`);
+  }
+  // Heartbeat so you can confirm data is landing without opening sqlite3.
+  console.debug(
+    "[FocusLens worker] /face-signals OK session=%s tier=%d",
+    session_id,
+    body.fatigue_tier
+  );
 }

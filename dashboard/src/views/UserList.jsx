@@ -8,6 +8,8 @@ export default function UserList() {
 
   useEffect(() => {
     let alive = true;
+    // Use the /api proxy (same as UserDetail) for consistency & to avoid
+    // mixed-origin issues.
     fetch("/api/reports")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
       .then((data) => {
@@ -22,7 +24,11 @@ export default function UserList() {
   if (err) return <div className="error">Error loading users: {err}</div>;
   if (users === null) return <div className="empty">Loading…</div>;
   if (users.length === 0)
-    return <div className="empty">No data yet. Browse with the extension installed and the backend running.</div>;
+    return (
+      <div className="empty">
+        No data yet. Browse with the extension installed and the backend running.
+      </div>
+    );
 
   return (
     <div className="card">
@@ -33,18 +39,31 @@ export default function UserList() {
             <th>User (hash)</th>
             <th>Last seen</th>
             <th>Sessions</th>
-            <th>Events</th>
+            <th>Total events</th>
+            <th>Face / Behav</th>
             <th>Avg fatigue</th>
           </tr>
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.user_ip_hash} onClick={() => navigate(`/user/${u.user_ip_hash}`)}>
-              <td><code>{u.user_ip_hash.slice(0, 8)}</code></td>
+            <tr
+              key={u.user_ip_hash}
+              onClick={() => navigate(`/user/${u.user_ip_hash}`)}
+            >
+              <td>
+                <code>{u.user_ip_hash.slice(0, 8)}</code>
+              </td>
               <td>{u.last_seen}</td>
               <td>{u.session_count}</td>
               <td>{u.event_count}</td>
-              <td>{u.avg_fatigue != null ? Number(u.avg_fatigue).toFixed(2) : "—"}</td>
+              <td>
+                <span style={{ color: "#1a1a2e" }}>{u.face_count ?? 0}</span>
+                {" / "}
+                <span style={{ color: "#4a90e2" }}>{u.behavioral_count ?? 0}</span>
+              </td>
+              <td>
+                {u.avg_fatigue != null ? Number(u.avg_fatigue).toFixed(2) : "—"}
+              </td>
             </tr>
           ))}
         </tbody>

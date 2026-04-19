@@ -229,8 +229,8 @@ function _mad(arr) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function computeAndSend() {
-  const FIVE_MIN = 30 * 1000;
-  const THIRTY_S = 5 * 1000;
+  const FIVE_MIN = 60 * 1000;
+  const THIRTY_S = 10 * 1000;
 
   // ── Typing error rate ─────────────────────────────────────────────────────
   const recentKeys = keyEvents.getRecent(FIVE_MIN);
@@ -345,7 +345,7 @@ async function _postBehavioralToBackend(fv) {
 
 // Start reporting after an initial 30-second warm-up period so we have
 // meaningful data before the first report.
-setInterval(computeAndSend, 5_000);
+setInterval(computeAndSend, 10_000);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Eye-tracking iframe management
@@ -430,31 +430,3 @@ chrome.runtime.onMessage.addListener((message) => {
     removeEyetrackingFrame();
   }
 });
-
-// Example: capture a screenshot from the page and send as base64 to backend
-function captureAndSendImage() {
-  // Create a canvas and draw the current page (or a video/image element)
-  const canvas = document.createElement('canvas');
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(document.body, 0, 0); // For demo: this will not work for full page, but works for images/video
-
-  // Get base64 string
-  const base64Image = canvas.toDataURL('image/png');
-  const base64Data = base64Image.split(',')[1];
-
-  getSessionId().then(session_id => {
-    fetch('http://localhost:8000/upload-image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id, image: base64Data })
-    });
-  });
-}
-
-/**
- * Call captureAndSendImage() to capture a screenshot (canvas-based) and POST it as base64 to the backend.
- * For webcam or video, draw the video element to canvas instead of document.body.
- * Backend endpoint: POST /upload-image { session_id, image (base64 string) }
- */

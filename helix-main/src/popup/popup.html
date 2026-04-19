@@ -341,10 +341,6 @@
         <svg class="gauge-svg" width="120" height="120" viewBox="0 0 120 120">
           <circle id="gauge-track" cx="60" cy="60" r="50" />
           <circle id="gauge-fill" cx="60" cy="60" r="50" />
-          <!-- Tick marks for 10 segments -->
-          <g id="gauge-ticks">
-            <!-- 10 ticks, JS will update if needed -->
-          </g>
         </svg>
         <div class="gauge-center">
           <span class="gauge-number" id="gauge-number">0</span>
@@ -363,15 +359,15 @@
     <button class="btn btn-primary" id="camera-btn">Enable eye tracking</button>
     <div id="error-msg"></div>
 
-     <!-- Per-site toggle -->
-    <!-- <div class="site-row">
+    <!-- Per-site toggle -->
+    <div class="site-row">
       <label for="site-toggle">Disable on this site</label>
       <label class="toggle">
         <input type="checkbox" id="site-toggle" />
         <span class="toggle-track"></span>
       </label>
     </div>
- -->
+
     <!-- Debug tier override -->
     <div class="debug-panel">
       <div class="debug-label">🛠 Debug — force tier</div>
@@ -392,12 +388,12 @@
       <div id="debug-status"></div>
     </div>
 
-     <!-- Footer -->
-    <!-- <p class="footer">
-      <strong>All processing is local.</strong><br />
-      No data leaves your device.
+    <!-- Footer -->
+    <p class="footer">
+      <strong>Developed By</strong><br />
+      TDF
     </p>
- -->
+
     <script src="popup.js"></script>
   </body>
 </html>

@@ -1,13 +1,3 @@
-// Listen for TIER_CHANGE messages from the background worker and dispatch the tier event
-if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message && message.type === "TIER_CHANGE" && typeof message.tier === "number") {
-      document.dispatchEvent(
-        new CustomEvent("focuslens:tier", { detail: { tier: message.tier } })
-      );
-    }
-  });
-}
 /**
  * src/content/adapter.js
  * ───────────────────────
@@ -28,6 +18,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
  */
 
 import { TIERS } from "../shared/presets.js";
+import { extractArticle, buildReaderView } from "./reader.js";
 
 // ─── Module state ─────────────────────────────────────────────────────────────
 
@@ -58,6 +49,57 @@ export function applyTier(tier) {
 let _styleEl = null; // <style id="focuslens-styles">
 let _overlayEl = null; // amber tint overlay
 let _hudEl = null; // tier-3 floating HUD
+
+// ─── Reader mode state ─────────────────────────────────────────────────────────
+let _readerModeActive = false;
+let _originalBodyHTML = null;
+let _originalBodyClasses = null;
+
+// ─── Reader mode activation/deactivation ──────────────────────────────────────
+function _activateReaderMode() {
+  if (_readerModeActive) return;
+
+  // Store original body for restoration
+  _originalBodyHTML = document.body.innerHTML;
+  _originalBodyClasses = document.body.className;
+
+  const article = extractArticle();
+  if (!article) {
+    console.warn(
+      "[FocusLens] Could not extract article — skipping reader mode"
+    );
+    // Fallback: use current tier 3 behavior (we'll still apply dark mode CSS)
+    return;
+  }
+
+  const readerView = buildReaderView(article);
+  if (!readerView) return;
+
+  // Replace body content with reader view
+  document.body.innerHTML = "";
+  document.body.appendChild(_overlayEl); // Re-inject overlay
+  if (_hudEl) document.body.appendChild(_hudEl); // Re-inject HUD if exists
+  document.body.appendChild(readerView);
+  document.body.className = "focuslens-reader-mode";
+  _readerModeActive = true;
+
+  console.log("[FocusLens] Reader mode activated");
+}
+
+function _deactivateReaderMode() {
+  if (!_readerModeActive || !_originalBodyHTML) return;
+
+  document.body.innerHTML = _originalBodyHTML;
+  document.body.className = _originalBodyClasses || "";
+  _readerModeActive = false;
+  _originalBodyHTML = null;
+  _originalBodyClasses = null;
+
+  // Re-inject overlay and HUD after restoration
+  _injectShell();
+
+  console.log("[FocusLens] Reader mode deactivated");
+}
 
 // ─── Main-content detection helpers ──────────────────────────────────────────
 function _clearMainContentMarkers() {
@@ -244,6 +286,13 @@ function _doApply(tier, force) {
     });
     _clearMainContentMarkers();
 
+    // ── 1a. Handle reader mode (tier 3 only) ─────────────────────────────────
+    if (tier === 3) {
+      _activateReaderMode();
+    } else if (_readerModeActive) {
+      _deactivateReaderMode();
+    }
+
     // ── 2. Inject tier CSS ───────────────────────────────────────────────────
     _styleEl.innerHTML = config.styles;
 
@@ -296,110 +345,7 @@ function _doApply(tier, force) {
 
     // ── 6. Manage floating HUD (tier 3 only) ──────────────────────────────────
     _updateHud(tier);
-
-    // ── 7. Ollama summarisation at tier >=2 (async, non-blocking) ─────────────
-    if (tier >= 2) {
-      _summarizeReadingContent().catch(() => {});
-    } else {
-      _restoreSummarizedContent();
-    }
   });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ollama summarisation — replaces long paragraphs with 1-2 sentence summaries
-// ─────────────────────────────────────────────────────────────────────────────
-
-const OLLAMA_URL = "http://localhost:11434/api/generate";
-const OLLAMA_MODEL = "llama3.2";
-const SUMMARY_MIN_LEN = 250;
-const SUMMARY_MAX_PARAS = 8;
-
-function _restoreSummarizedContent() {
-  document.querySelectorAll("[data-focuslens-original]").forEach((el) => {
-    const html = el.dataset.focuslensOriginal;
-    if (typeof html === "string") {
-      el.innerHTML = html;
-      delete el.dataset.focuslensOriginal;
-    }
-  });
-}
-
-async function _summarizeReadingContent() {
-  const main = _findMainContentNode();
-  if (!main) return;
-  const paragraphs = Array.from(main.querySelectorAll("p"))
-    .filter(
-      (p) =>
-        !p.dataset.focuslensOriginal &&
-        (p.innerText || "").length > SUMMARY_MIN_LEN
-    )
-    .slice(0, SUMMARY_MAX_PARAS);
-
-  for (const p of paragraphs) {
-    const originalHTML = p.innerHTML;
-    const originalText = p.innerText;
-    p.dataset.focuslensOriginal = originalHTML;
-    p.innerHTML =
-      '<span style="opacity:0.5;font-style:italic">\u27F3 Simplifying for focus mode\u2026</span>';
-
-    fetch(OLLAMA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt:
-          "Summarize this in 1-2 very simple sentences a tired person can read at a glance:\n\n" +
-          originalText,
-        stream: false,
-      }),
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad response"))))
-      .then((data) => {
-        const summary = (data && data.response ? String(data.response) : "").trim();
-        if (!summary) {
-          p.innerHTML = originalHTML;
-          delete p.dataset.focuslensOriginal;
-          return;
-        }
-        p.innerHTML =
-          '<span data-focuslens-summary="true" style="display:block;background:rgba(240,192,64,0.12);border-left:3px solid #f0c040;padding:10px 14px;border-radius:0 6px 6px 0;line-height:1.6">' +
-          '<span style="font-size:11px;opacity:0.55;letter-spacing:0.05em;text-transform:uppercase;display:block;margin-bottom:4px">focus summary</span>' +
-          _escapeHTML(summary) +
-          '<button style="float:right;font-size:11px;background:none;border:1px solid rgba(255,255,255,0.2);border-radius:4px;padding:2px 8px;cursor:pointer;opacity:0.6;margin-top:2px" onclick="focuslensRestore(this)">show full</button>' +
-          "</span>";
-      })
-      .catch((err) => {
-        // Ollama likely not running — silently restore original.
-        console.warn("[FocusLens] Ollama summarise failed:", err && err.message);
-        p.innerHTML = originalHTML;
-        delete p.dataset.focuslensOriginal;
-      });
-  }
-}
-
-function _escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// Inject restore hook into page scope (inline onclick needs a page-scope function).
-if (!window.focuslensRestore) {
-  const script = document.createElement("script");
-  script.textContent =
-    "window.focuslensRestore = function(btn){" +
-    "  var host = btn.closest('[data-focuslens-original]');" +
-    "  if (host && host.dataset.focuslensOriginal) {" +
-    "    host.innerHTML = host.dataset.focuslensOriginal;" +
-    "    delete host.dataset.focuslensOriginal;" +
-    "  }" +
-    "};";
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
 }
 
 // ── DevTools / demo global ────────────────────────────────────────────────────

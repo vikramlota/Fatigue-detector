@@ -1,0 +1,5 @@
+bhappaprompt.txt
+.venv/
+__pycache__/
+node_modules/
+README_INTEGRATION.md
